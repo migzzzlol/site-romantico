@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Para a Minha Namorada ❤️</title>
+<style>
+  :root{--accent:#4da3ff;--card:#ffffff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,#e8f6ff 0%,#fff0f6 100%);color:#123}
+  /* login overlay */
+  #loginOverlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(2,10,30,0.35),rgba(255,255,255,0.02));z-index:9999}
+  #loginBox{width:360px;max-width:94%;background:var(--card);padding:22px;border-radius:14px;box-shadow:0 12px 40px rgba(2,18,45,0.15);text-align:center}
+  #loginBox h2{margin:6px 0;color:#0b4a78}
+  #loginBox input{width:100%;padding:12px;border-radius:10px;border:1px solid #e6e9ef;font-size:1rem}
+  #loginBox button{margin-top:12px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:white;font-weight:600;cursor:pointer}
+  /* hearts */
+  .heart{position:fixed;top:-10%;font-size:24px;opacity:0.95;color:#bfe8ff;animation:fall linear infinite;pointer-events:none}
+  @keyframes fall{0%{transform:translateY(-10vh) rotate(0)}100%{transform:translateY(120vh) rotate(360deg)}}
+  header{padding:28px 16px;text-align:center;background:rgba(255,255,255,0.6);backdrop-filter:blur(6px)}
+  header h1{margin:0;font-size:2rem;color:#0b3f6b}
+  .container{max-width:980px;margin:20px auto;padding:18px}
+  .card{background:var(--card);padding:18px;border-radius:14px;box-shadow:0 8px 30px rgba(12,40,70,0.06);margin-bottom:18px}
+  .card h2{margin-top:0;color:#0e6aa4}
+  .gallery img{width:100%;border-radius:12px;margin-top:12px;display:block}
+  .thumbs{display:flex;gap:8px;margin-top:12px;overflow-x:auto}
+  .thumbs img{width:110px;height:72px;object-fit:cover;border-radius:8px;cursor:pointer;opacity:.9;border:3px solid transparent}
+  .thumbs img.active{border-color:#9fd4ff;opacity:1}
+  .editor{background:#eef6ff;padding:16px;border-radius:12px}
+  input,textarea,button,select{font-size:1rem}
+  .controls{display:flex;gap:8px;margin-top:10px}
+  .small{font-size:0.9rem;color:#556}
+  footer{text-align:center;padding:28px;color:#627;opacity:0.9}
+  /* transitions */
+  .fade-in{transition:opacity .5s ease, transform .4s ease}
+</style>
+</head>
+<body>
+<!-- hearts -->
+<div id="hearts"></div>
+
+<!-- login -->
+<div id="loginOverlay" role="dialog" aria-modal="true">
+  <div id="loginBox">
+    <h2>Bem-vinda 💗</h2>
+    <p>Insere a palavra-passe para entrar</p>
+    <input id="passInput" type="password" placeholder="*******" aria-label="palavra-passe"/>
+    <div style="height:8px"></div>
+    <div id="loginError" style="min-height:18px;color:#b43"></div>
+    <button id="btnEnter">Entrar</button>
+    <p class="small" style="margin-top:10px">Senha: <strong>1112025</strong> (podes mudar no editor)</p>
+  </div>
+</div>
+
+<header class="fade-in"><h1 id="siteTitle">Para a Minha Namorada ❤️</h1></header>
+
+<main class="container fade-in" id="conteudo" style="opacity:0;transform:translateY(8px)">
+  <section class="card">
+    <h2>Mensagem 💌</h2>
+    <div id="mensagem">Escreve algo doce — usa o editor para alterar.</div>
+  </section>
+
+  <section class="card">
+    <h2>A Nossa Galeria 📸</h2>
+    <div id="galleryArea">
+      <div id="slides" style="overflow:hidden;border-radius:12px"></div>
+      <div class="thumbs" id="thumbs"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Linha do Tempo 🗓️</h2>
+    <div id="timeline"></div>
+  </section>
+
+  <section class="card">
+    <h2>Mensagens Secretas 🔒</h2>
+    <div id="secretList"></div>
+    <div style="margin-top:8px">
+      <input id="secretCode" placeholder="Insere o código para revelar..." />
+      <div class="controls"><button id="revealSecret">Revelar</button><button id="openEditor">✎ Editar</button></div>
+    </div>
+  </section>
+</main>
+
+<!-- editor panel -->
+<div id="editorPanel" style="display:none;position:fixed;right:18px;bottom:18px;width:360px;background:white;padding:12px;border-radius:12px;box-shadow:0 12px 40px rgba(2,18,45,0.12);z-index:999">
+  <h3>Editor Rápido</h3>
+  <label>Título do Site</label><input id="inputTitle" placeholder="Título"/>
+  <label>Mensagem (texto)</label><textarea id="inputMessage" rows="4"></textarea>
+  <label>Adicionar fotos</label><input id="inputImgs" type="file" accept="image/*" multiple />
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button id="saveLocal">Guardar local</button>
+    <button id="exportHTML">Exportar HTML</button>
+  </div>
+  <hr/>
+  <h4>Timeline</h4>
+  <input id="tlDate" type="date"/><input id="tlTitle" placeholder="Título" />
+  <textarea id="tlDesc" placeholder="Descrição"></textarea>
+  <button id="addTl">Adicionar evento</button>
+  <hr/>
+  <h4>Mensagens secretas</h4>
+  <input id="sCode" placeholder="Código (ex: amor123)"/><input id="sTitle" placeholder="Título"/>
+  <textarea id="sText" placeholder="Mensagem secreta..."></textarea>
+  <button id="addSecretBtn">Adicionar mensagem secreta</button>
+  <hr/>
+  <label>Música (opcional)</label><input id="inputMusic" type="file" accept="audio/*" />
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button id="playMusic">Tocar</button><button id="stopMusic">Parar</button>
+  </div>
+  <div style="height:6px"></div>
+  <button id="closeEditor" style="background:#ddd;color:#111">Fechar</button>
+</div>
+
+<footer class="fade-in"><small>Feito com carinho 💙</small></footer>
+
+<audio id="bgMusic" loop></audio>
+
+<script>
+// hearts animation
+(function(){ const container = document.getElementById('hearts'); for(let i=0;i<25;i++){ const d=document.createElement('div'); d.className='heart'; d.textContent='💙'; d.style.left=Math.random()*100+'vw'; d.style.fontSize=12+Math.random()*32+'px'; d.style.animationDuration=4+Math.random()*8+'s'; container.appendChild(d);} })();
+
+// simple qs
+function qs(id){return document.getElementById(id)}
+
+// storage key
+const KEY = 'site_romantico_final_v3';
+
+// default
+const defaultCfg = { title:'Para a Minha Namorada ❤️', message:'<p>Escreve algo doce aqui 💌</p>', images:[], timeline:[], secrets:[], music:''};
+
+// load/save
+function load(){ try{ const r=localStorage.getItem(KEY); return r?JSON.parse(r):JSON.parse(JSON.stringify(defaultCfg)) }catch(e){return JSON.parse(JSON.stringify(defaultCfg))}}
+function save(cfg){ localStorage.setItem(KEY, JSON.stringify(cfg))}
+
+// renderers
+function renderAll(cfg){
+  qs('siteTitle').textContent = cfg.title || '';
+  qs('mensagem').innerHTML = cfg.message || '';
+  renderGallery(cfg.images||[]);
+  renderTimeline(cfg.timeline||[]);
+  renderSecretsList(cfg.secrets||[]);
+  if(cfg.music){ qs('bgMusic').src = cfg.music }
+}
+function renderGallery(images){
+  const slides = qs('slides'); const thumbs = qs('thumbs');
+  slides.innerHTML=''; thumbs.innerHTML='';
+  images.forEach((src,i)=>{ const img=document.createElement('img'); img.src=src; img.style.width='100%'; img.style.display='block'; img.alt='foto'; slides.appendChild(img); const t=document.createElement('img'); t.src=src; t.dataset.i=i; t.addEventListener('click', ()=>{ window.scrollTo({top:slides.offsetTop,behavior:'smooth'}); }); thumbs.appendChild(t); });
+}
+function renderTimeline(items){
+  const el = qs('timeline'); el.innerHTML=''; if(!items.length){ el.innerHTML='<div class="small">Ainda sem eventos</div>'; return;}
+  items.slice().sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(it=>{ const d=document.createElement('div'); d.style.padding='10px'; d.style.borderRadius='8px'; d.style.background='#f7fbff'; d.style.marginBottom='8px'; d.innerHTML='<strong>'+escapeHtml(it.title)+'</strong> <div class="small">'+escapeHtml(it.date)+'</div><div style="margin-top:6px">'+escapeHtml(it.desc)+'</div>'; el.appendChild(d); })
+}
+function renderSecretsList(list){ const el=qs('secretList'); el.innerHTML=''; if(!list.length){ el.innerHTML='<div class="small">Nenhuma mensagem secreta</div>'; return;} list.forEach(s=>{ const box=document.createElement('div'); box.style.padding='10px'; box.style.borderRadius='8px'; box.style.background='#fff6fb'; box.style.marginBottom='8px'; box.innerHTML='<strong>'+escapeHtml(s.title)+'</strong><div class="small">Código: '+escapeHtml(s.code)+'</div>'; el.appendChild(box); })}
+
+// helpers
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+// init
+let cfg = load();
+renderAll(cfg);
+
+// login
+const PASSWORD = '1112025';
+qs('btnEnter').addEventListener('click', ()=>{ const v=qs('passInput').value.trim(); if(v===PASSWORD){ qs('loginOverlay').style.display='none'; qs('conteudo').style.opacity=1; qs('conteudo').style.transform='translateY(0)'; } else { qs('loginError').textContent='Palavra-passe incorreta'; qs('passInput').focus(); } });
+
+// editor open
+qs('openEditor').addEventListener('click', ()=>{ qs('editorPanel').style.display='block'; qs('inputTitle').value=cfg.title; qs('inputMessage').value = (cfg.message||'').replace(/<[^>]+>/g,'').trim(); });
+
+// editor close
+qs('closeEditor').addEventListener('click', ()=>{ qs('editorPanel').style.display='none'; });
+
+// save local
+qs('saveLocal').addEventListener('click', ()=>{ const title=qs('inputTitle').value.trim(); const msg=qs('inputMessage').value.trim(); cfg.title = title||cfg.title; cfg.message = '<p>'+msg.replace(/\n/g,'<br>')+'</p>'; save(cfg); renderAll(cfg); alert('Guardado localmente!'); });
+
+// images upload
+qs('inputImgs').addEventListener('change', function(){ const files=Array.from(this.files); if(!files.length) return; const readers = files.map(f=> new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); })); Promise.all(readers).then(results=>{ cfg.images = (cfg.images||[]).concat(results); save(cfg); renderGallery(cfg.images); alert('Imagens adicionadas!'); qs('inputImgs').value=''; }).catch(()=>alert('Erro a ler imagens')); });
+
+// export HTML
+qs('exportHTML').addEventListener('click', ()=>{ const html = '<!doctype html>'+document.documentElement.outerHTML; const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='index.html'; a.click(); URL.revokeObjectURL(url); });
+
+// add timeline
+qs('addTl').addEventListener('click', ()=>{ const date=qs('tlDate').value, title=qs('tlTitle').value.trim(), desc=qs('tlDesc').value.trim(); if(!date||!title) return alert('Data e título obrigatórios'); cfg.timeline = cfg.timeline||[]; cfg.timeline.push({date,title,desc}); save(cfg); renderTimeline(cfg.timeline); qs('tlDate').value=''; qs('tlTitle').value=''; qs('tlDesc').value=''; alert('Evento adicionado'); });
+
+// secrets
+qs('addSecretBtn').addEventListener('click', ()=>{ const code=qs('sCode').value.trim(), title=qs('sTitle').value.trim(), text=qs('sText').value.trim(); if(!code||!title) return alert('Código e título são obrigatórios'); cfg.secrets = cfg.secrets||[]; cfg.secrets.push({code,title,text}); save(cfg); renderSecretsList(cfg.secrets); qs('sCode').value=''; qs('sTitle').value=''; qs('sText').value=''; alert('Mensagem secreta adicionada'); });
+qs('revealSecret').addEventListener('click', ()=>{ const code=qs('secretCode').value.trim(); const found=(cfg.secrets||[]).find(s=>s.code===code); if(!found) return alert('Código não encontrado'); alert('Mensagem: '+found.text); });
+
+// music
+qs('inputMusic').addEventListener('change', function(){ const f=this.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ cfg.music = r.result; save(cfg); qs('bgMusic').src = cfg.music; alert('Música carregada'); qs('inputMusic').value=''; }; r.readAsDataURL(f); });
+qs('playMusic').addEventListener('click', ()=>{ const m=qs('bgMusic'); if(m.src){ m.play(); } else alert('Carrega uma música no editor.'); });
+qs('stopMusic').addEventListener('click', ()=>{ const m=qs('bgMusic'); m.pause(); m.currentTime=0; });
+
+// small UX: show editor if logged in
+(function(){ if(!qs('loginOverlay')) return; })();
+
+</script>
+</body>
+</html>
