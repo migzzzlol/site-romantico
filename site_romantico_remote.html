@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Site Romântico — com Deploy & Backend</title>
+<style>
+  /* (styles similar to previous, compacted) */
+  body{font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#f8fbff,#fce4ec);margin:0;color:#112}
+  header{padding:20px;text-align:center}
+  .editor-panel{position:fixed;right:18px;bottom:72px;width:380px;max-width:94%;background:white;padding:12px;border-radius:12px;box-shadow:0 12px 40px rgba(2,18,45,0.12);z-index:1000;display:none}
+  .btn{background:#fff;border:1px solid #ddd;padding:8px 10px;border-radius:8px;cursor:pointer}
+  input,textarea{width:100%;padding:8px;border-radius:8px;border:1px solid #e6e9ef;margin-top:6px}
+  .note{font-size:0.85rem;color:#556}
+  .status{margin-top:8px;padding:8px;border-radius:8px;background:#f6f9ff;border:1px solid #e2efff;color:#045}
+  .small{font-size:0.9rem;color:#445}
+</style>
+</head>
+<body>
+<header>
+  <h1>Para Ti — (versão com Deploy)</h1>
+  <p class="small">Editor remoto, deploy para GitHub e backend opcional</p>
+</header>
+
+<main style="max-width:900px;margin:18px auto;padding:12px">
+  <section id="mensagem" contenteditable="true" style="background:#fff;padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(12,40,70,0.04)">
+    <h2>Mensagem</h2>
+    <p>Escreve algo doce aqui — isto funciona offline e podes exportar.</p>
+  </section>
+
+  <div style="margin-top:12px">
+    <button id="openEditorBtn" class="btn">✎ Abrir Editor</button>
+    <span class="note">Protegido: ações remotas exigem senha de editor ou token GitHub.</span>
+  </div>
+</main>
+
+<!-- Editor panel -->
+<div class="editor-panel" id="editor">
+  <h3>Editor rápido & Remoto</h3>
+
+  <label>Senha do Editor (para acções remotas)</label>
+  <input id="editorPass" placeholder="Criar/Inserir senha (curta)"/>
+  <div style="display:flex;gap:8px;margin-top:6px">
+    <button id="setPass" class="btn">Guardar senha</button>
+    <button id="unlockPass" class="btn">Desbloquear</button>
+  </div>
+  <div id="passStatus" class="status" style="display:none"></div>
+
+  <hr/>
+
+  <label>Título</label><input id="inputTitle"/>
+  <label>Mensagem (texto)</label><textarea id="inputMessage" rows="4"></textarea>
+
+  <label>Adicionar fotos</label><input id="inputImgs" type="file" accept="image/*" multiple/>
+
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button id="apply" class="btn" disabled>Aplicar (local)</button>
+    <button id="exportHTML" class="btn" disabled>Exportar HTML</button>
+  </div>
+
+  <hr/>
+  <h4>Deploy para GitHub (automático)</h4>
+  <p class="small">Cria um Token em <code>Settings → Developer settings → Personal access tokens</code> com scope <strong>public_repo</strong> (ou repo para privado).</p>
+  <label>GitHub Username</label><input id="ghUser" placeholder="teu-usuario"/>
+  <label>Repositório</label><input id="ghRepo" placeholder="site-romantico"/>
+  <label>Branch</label><input id="ghBranch" value="main"/>
+  <label>Personal Access Token (PAT)</label><input id="ghToken" placeholder="ghp_xxx ..." />
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button id="deployGitHub" class="btn" disabled>Deploy para GitHub</button>
+  </div>
+  <div id="deployStatus" class="status" style="display:none"></div>
+
+  <hr/>
+  <h4>Guardar num backend (opcional)</h4>
+  <p class="small">Se preferires guardar num servidor teu, executa o servidor Node.js (instruções abaixo) e coloca a URL.</p>
+  <label>Backend URL</label><input id="backendURL" placeholder="https://meu-servidor.com/api/save"/>
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button id="saveBackend" class="btn" disabled>Guardar no Backend</button>
+  </div>
+  <div id="backendStatus" class="status" style="display:none"></div>
+
+  <hr/>
+  <div class="small">Notas de segurança: não partilhes o teu PAT com ninguém. O botão de deploy fará um commit para o repositório indicado.</div>
+</div>
+
+<script>
+/*
+  Funcionalidades implementadas:
+  1) Editor password: cria/guarda hash no localStorage; desbloqueia ações remotas.
+  2) Deploy para GitHub: usa GitHub REST API para criar/atualizar index.html no repositório.
+  3) Save to Backend: envia config JSON via POST para uma API REST (node example abaixo).
+*/
+
+// -- helpers
+function qs(id){return document.getElementById(id)}
+function show(el){ el.style.display = ''; }
+function hide(el){ el.style.display = 'none'; }
+function setStatus(id, msg, ok=true){ const el=qs(id); el.style.display=''; el.textContent = msg; el.style.background = ok? '#f6fff6' : '#fff6f6'; el.style.color = ok? '#064' : '#b43'; }
+function clearStatus(id){ qs(id).style.display='none'; qs(id).textContent=''; }
+
+// -- admin password (uses subtle crypto SHA-256)
+const ADMIN_KEY = 'site_admin_hash_v1';
+async function sha256hex(str){
+  const enc = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function setAdminPass(){
+  const v = qs('editorPass').value || '';
+  if(!v){ alert('Insere uma senha'); return; }
+  const h = await sha256hex(v);
+  localStorage.setItem(ADMIN_KEY, h);
+  setStatus('passStatus','Senha guardada localmente. Usa desbloquear para permitir ações remotas.', true);
+  enableRemoteButtons(false); // still locked until unlock
+}
+async function unlockAdmin(){
+  const v = qs('editorPass').value || '';
+  const stored = localStorage.getItem(ADMIN_KEY);
+  if(!stored){ alert('A senha não está definida. Usa "Guardar senha" primeiro.'); return; }
+  if(!v){ alert('Insere a senha para desbloquear'); return; }
+  const h = await sha256hex(v);
+  if(h === stored){ setStatus('passStatus','Editor desbloqueado ✅', true); enableRemoteButtons(true); }
+  else{ setStatus('passStatus','Senha incorreta', false); enableRemoteButtons(false); }
+}
+function enableRemoteButtons(enable){
+  qs('apply').disabled = !enable;
+  qs('exportHTML').disabled = !enable;
+  qs('deployGitHub').disabled = !enable;
+  qs('saveBackend').disabled = !enable;
+}
+
+// -- editor open
+qs('openEditorBtn').addEventListener('click', ()=>{
+  const ed = qs('editor'); ed.style.display = ed.style.display === 'none' ? 'block' : 'none';
+  loadConfigToUI();
+});
+
+// -- local config (stored in localStorage as before)
+const STORAGE_KEY = 'siteRomantico_v_final_remote';
+function loadConfig(){ try{ const raw = localStorage.getItem(STORAGE_KEY); return raw?JSON.parse(raw): {title:'Para Ti, Meu Amor', message:'<h2>Mensagem</h2><p>Escreve aqui algo doce.</p>', images:[], timeline:[], secrets:[]}; }catch(e){ return {title:'Para Ti,Meu Amor', message:'<h2>Mensagem</h2><p>Escreve aqui algo doce.</p>', images:[], timeline:[], secrets:[]}; } }
+function saveConfig(cfg){ localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); }
+
+// -- UI load/save
+function loadConfigToUI(){
+  const cfg = loadConfig();
+  qs('inputTitle').value = cfg.title || '';
+  qs('inputMessage').value = (cfg.message||'').replace(/<[^>]+>/g,'').trim();
+}
+qs('apply').addEventListener('click', ()=>{
+  const cfg = loadConfig();
+  cfg.title = qs('inputTitle').value || cfg.title;
+  cfg.message = '<h2>Mensagem</h2><p>' + (qs('inputMessage').value||'').replace(/\n/g,'<br>') + '</p>';
+  saveConfig(cfg);
+  applyConfigToPage(cfg);
+  setStatus('passStatus','Alterações aplicadas localmente.', true);
+});
+
+function applyConfigToPage(cfg){
+  qs('mensagem').innerHTML = cfg.message || '';
+  qs('siteTitle')?.remove(); // no-op if not exist
+}
+
+// -- images upload (adds dataURL to config)
+qs('inputImgs').addEventListener('change', function(){
+  const files = Array.from(this.files); if(!files.length) return;
+  const cfg = loadConfig();
+  Promise.all(files.map(f=>new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); })))
+    .then(urls=>{ cfg.images = (cfg.images||[]).concat(urls); saveConfig(cfg); setStatus('passStatus','Imagens adicionadas localmente.', true); qs('inputImgs').value=''; })
+    .catch(()=>setStatus('passStatus','Erro a ler imagens', false));
+});
+
+// -- export standalone HTML generator
+function generateStandaloneHTML(cfg){
+  cfg = cfg || loadConfig();
+  const title = (cfg.title||'Para Ti, Meu Amor');
+  const message = cfg.message || '<h2>Mensagem</h2><p></p>';
+  const imgsHTML = (cfg.images||[]).map(s=>`<img src="${s}" style="max-width:100%;display:block;margin-top:8px;border-radius:8px"/>`).join('\\n');
+  return `<!doctype html><html lang="pt"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${escapeHtml(title)}</title></head><body style="font-family:Inter,Arial;margin:20px">${message}${imgsHTML}</body></html>`;
+}
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+qs('exportHTML').addEventListener('click', ()=>{
+  const html = generateStandaloneHTML(loadConfig());
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'index.html'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+});
+
+// -- GITHUB DEPLOY (uses REST API v3)
+// Steps: 1) GET file to obtain sha (if exists) 2) PUT file content base64
+function b64EncodeUnicode(str) { return btoa(unescape(encodeURIComponent(str))); }
+
+async function githubGetFile(owner, repo, path, token){
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
+  const res = await fetch(url, { headers: { Authorization: 'token ' + token, Accept: 'application/vnd.github.v3+json' }});
+  if(res.status === 200) return await res.json();
+  if(res.status === 404) return null;
+  throw new Error('GitHub API error ' + res.status);
+}
+
+async function githubCreateOrUpdate(owner, repo, path, contentBase64, message, token, sha){
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
+  const body = { message, content: contentBase64, branch: qs('ghBranch').value || 'main' };
+  if(sha) body.sha = sha;
+  const res = await fetch(url, { method:'PUT', headers:{ Authorization: 'token ' + token, Accept: 'application/vnd.github.v3+json' }, body: JSON.stringify(body) });
+  return res;
+}
+
+qs('deployGitHub').addEventListener('click', async ()=>{
+  clearStatus('deployStatus'); setStatus('deployStatus','A preparar ficheiro…', true);
+  const owner = qs('ghUser').value.trim();
+  const repo = qs('ghRepo').value.trim();
+  const token = qs('ghToken').value.trim();
+  const branch = qs('ghBranch').value.trim() || 'main';
+  if(!owner || !repo || !token){ setStatus('deployStatus','Preenche user/repo/token', false); return; }
+  try{
+    const cfg = loadConfig();
+    const html = generateStandaloneHTML(cfg);
+    const contentB64 = b64EncodeUnicode(html);
+    setStatus('deployStatus','A verificar ficheiro existente no GitHub...', true);
+    const existing = await githubGetFile(owner, repo, 'index.html', token);
+    const sha = existing ? existing.sha : undefined;
+    setStatus('deployStatus','A enviar commit para o GitHub...', true);
+    const message = 'Atualizar site (deploy via editor)';
+    const res = await githubCreateOrUpdate(owner, repo, 'index.html', contentB64, message, token, sha);
+    if(res.ok){ setStatus('deployStatus','Deploy feito com sucesso! Verifica o site em https://'+owner+'.github.io/'+repo, true); }
+    else {
+      const txt = await res.text(); setStatus('deployStatus','Erro no deploy: '+res.status+' '+txt, false);
+    }
+  }catch(err){
+    setStatus('deployStatus','Erro: '+err.message, false);
+  }
+});
+
+// -- Save to backend (POST JSON)
+qs('saveBackend').addEventListener('click', async ()=>{
+  clearStatus('backendStatus'); setStatus('backendStatus','A enviar para o backend…', true);
+  const url = qs('backendURL').value.trim();
+  if(!url){ setStatus('backendStatus','Insere a URL do backend', false); return; }
+  try{
+    const cfg = loadConfig();
+    const res = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(cfg) });
+    if(res.ok){ setStatus('backendStatus','Guardado no backend com sucesso.', true); }
+    else { const txt = await res.text(); setStatus('backendStatus','Erro backend: '+res.status+' '+txt, false); }
+  }catch(err){ setStatus('backendStatus','Erro: '+err.message, false); }
+});
+
+/* enable/disable remote buttons initially */
+enableRemoteButtons(false);
+
+// -- helper: set/unlock handlers
+qs('setPass').addEventListener('click', ()=>{ setAdminPass(); });
+qs('unlockPass').addEventListener('click', ()=>{ unlockAdmin(); });
+
+// -- apply config on load
+(function init(){
+  const cfg = loadConfig();
+  applyConfigToPage(cfg);
+})();
+</script>
+
+<!-- Backend server example (Node.js + Express) - instructions below -->
+<!--
+NODE SERVER EXAMPLE (save this as server.js and run `node server.js`)
+
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const bodyParser = require('body-parser');
+const app = express();
+app.use(bodyParser.json({ limit: '10mb' }));
+
+// endpoint to save config (JSON)
+app.post('/api/save', (req, res) => {
+  const cfg = req.body;
+  // simple saving to a file (danger: no auth!)
+  fs.writeFileSync(path.join(__dirname, 'saved_config.json'), JSON.stringify(cfg, null, 2));
+  // optionally generate index.html as in frontend
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${cfg.message || ''}</body></html>`;
+  fs.writeFileSync(path.join(__dirname, 'index.html'), html);
+  res.json({ ok: true });
+});
+
+app.listen(3000, () => console.log('Backend running on http://localhost:3000'));
+-->
+
+</body>
+</html>
